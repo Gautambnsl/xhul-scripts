@@ -254,4 +254,4 @@ module.exports = { sendMultipleTransactions };
 
 
 
-//sendMultipleTransactions(["0xA92ea390D2Cd54239050b9ea044BB02690CF27F8"],0.1,"3526eaf177d58190847a6997d63b67d270f6a2ff341df56f29fc9fd157268324",{network : "optimism-sepolia"});
+//sendMultipleTransactions(["0xA92ea390D2Cd54239050b9ea044BB02690CF27F8"],0.1,"PUT YOUR PRIVATEKEY HERE",{network : "optimism-sepolia"});
