@@ -193,7 +193,9 @@ module.exports = {
   getDBStats
 };
 
-//Example direct usage (for testing only):
-// findSimilarAddresses("0x5b464a47f4de9c2afd537182d5ae976e1c1a707c", { excludeTarget: true })
+// Example direct usage (for testing only):
+//  findSimilarAddresses("0x5ba9d04c89a028098940fc1112c2e10f0f781988", { excludeTarget: false })
 //   .then(console.log)
 //   .catch(console.error);
+
+
