@@ -186,16 +186,149 @@ async function getDBStats() {
   };
 }
 
+/**
+ * Generate addresses until finding one similar to the target
+ * @param {string} targetAddress - Address to find a similar match for
+ * @param {Object} options - Generation and matching options
+ * @returns {Promise<Object>} - The similar address found and stats
+ */
+async function generateUntilSimilarFound(targetAddress, options = {}) {
+  // Default options
+  const opts = {
+    prefixLength: options.prefixLength || 4,
+    suffixLength: options.suffixLength || 4,
+    matchType: options.matchType || 'both', // 'prefix', 'suffix', or 'both'
+    maxAttempts: options.maxAttempts || 1000000,
+    batchSize: options.batchSize || 100,
+    statusInterval: options.statusInterval || 1000
+  };
+  
+  // Validate target address
+  if (!targetAddress.match(/^0x[0-9a-fA-F]{40}$/)) {
+    throw new Error('Invalid Ethereum address format');
+  }
+  
+  targetAddress = targetAddress.toLowerCase();
+  
+  // Extract prefix and suffix for comparison
+  const targetPrefix = targetAddress.substring(2, 2 + opts.prefixLength);
+  const targetSuffix = targetAddress.substring(42 - opts.suffixLength);
+  
+  console.log(`Generating addresses until finding one similar to ${targetAddress}`);
+  console.log(`Target prefix: ${targetPrefix}, suffix: ${targetSuffix}, match type: ${opts.matchType}`);
+  
+  const startTime = Date.now();
+  let attempts = 0;
+  let similarFound = null;
+  
+  while (!similarFound && attempts < opts.maxAttempts) {
+    const batchStartAttempts = attempts;
+    
+    // Generate a batch of addresses
+    for (let i = 0; i < opts.batchSize; i++) {
+      attempts++;
+      
+      // Generate random wallet
+      const wallet = ethers.Wallet.createRandom();
+      const address = wallet.address.toLowerCase();
+      const privateKey = wallet.privateKey;
+      
+      // Extract prefix and suffix
+      const prefix = address.substring(2, 2 + opts.prefixLength);
+      const suffix = address.substring(42 - opts.suffixLength);
+      
+      // Create address document for DB
+      const addressDoc = new Address({
+        address,
+        privateKey,
+        prefix,
+        suffix
+      });
+      
+      // Check if this address matches the target
+      let isMatch = false;
+      let matchReason = '';
+      
+      if (opts.matchType === 'prefix' && prefix === targetPrefix) {
+        isMatch = true;
+        matchReason = 'Matching prefix';
+      } else if (opts.matchType === 'suffix' && suffix === targetSuffix) {
+        isMatch = true;
+        matchReason = 'Matching suffix';
+      } else if (opts.matchType === 'both' && (prefix === targetPrefix || suffix === targetSuffix)) {
+        isMatch = true;
+        matchReason = prefix === targetPrefix ? 'Matching prefix' : 'Matching suffix';
+        if (prefix === targetPrefix && suffix === targetSuffix) {
+          matchReason = 'Matching both prefix and suffix';
+        }
+      }
+      
+      try {
+        // Save to database regardless of match (we store all generated addresses)
+        await addressDoc.save();
+        
+        // If this is a match, we're done
+        if (isMatch) {
+          similarFound = {
+            address,
+            privateKey,
+            prefix,
+            suffix,
+            similarity: matchReason,
+            attemptNumber: attempts
+          };
+          break;
+        }
+      } catch (error) {
+        if (error.code === 11000) {
+          // Duplicate address, extremely unlikely but handle it
+          console.warn(`Duplicate address ${address} generated, continuing...`);
+        } else {
+          console.error(`Error saving address ${address}:`, error);
+        }
+      }
+      
+      // Log progress at regular intervals
+      if (attempts % opts.statusInterval === 0) {
+        const elapsedSeconds = (Date.now() - startTime) / 1000;
+        const attemptsPerSecond = Math.round(attempts / elapsedSeconds);
+        console.log(`Made ${attempts} attempts (${attemptsPerSecond}/sec), still searching...`);
+      }
+    }
+  }
+  
+  const elapsedSeconds = (Date.now() - startTime) / 1000;
+  const attemptsPerSecond = Math.round(attempts / elapsedSeconds);
+  
+  if (similarFound) {
+    console.log(`Found similar address after ${attempts} attempts (${attemptsPerSecond}/sec)!`);
+    console.log(`Similar address: ${similarFound.address} (${similarFound.similarity})`);
+  } else {
+    console.log(`No similar address found after ${attempts} attempts (${attemptsPerSecond}/sec).`);
+  }
+  
+  return {
+    similarFound,
+    stats: {
+      attempts,
+      timeSeconds: elapsedSeconds,
+      attemptsPerSecond
+    }
+  };
+}
+
 module.exports = {
   generateAddresses,
   findSimilarAddresses,
   countAddresses,
-  getDBStats
+  getDBStats,
+  generateUntilSimilarFound
 };
 
+
 // Example direct usage (for testing only):
-//  findSimilarAddresses("0x5ba9d04c89a028098940fc1112c2e10f0f781988", { excludeTarget: false })
-//   .then(console.log)
-//   .catch(console.error);
+//generateUntilSimilarFound("0x5ba9d04c89a028098940fc1112c2e10f0f781988", { excludeTarget: false });
+// .then(console.log)
+// //   .catch(console.error);
 
 
